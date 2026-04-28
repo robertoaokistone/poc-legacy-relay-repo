@@ -212,9 +212,7 @@ runs:
               --body-file - \
               --base "${BASE_BRANCH}" \
               --head "${SYNC_BRANCH}" \
-              "${LABEL_ARGS[@]}" \
-              --json url \
-              --jq '.url'
+              "${LABEL_ARGS[@]}"
           )"
 
           echo "Created PR: ${PR_URL}"
