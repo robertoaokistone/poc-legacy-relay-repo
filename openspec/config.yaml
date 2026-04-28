@@ -1,0 +1,78 @@
+schema: spec-driven
+
+context: |
+  Project: legacy-relay
+  Type: GitHub Action (reusable / composite or JavaScript action)
+  Repository: poc-legacy-relay-repo
+
+  ## Objetivo
+  Sincronização unidirecional de um repositório legado para um repositório novo no GitHub.
+  Todo merge (push na branch padrão) no repo legado dispara um Pull Request
+  no repo novo contendo apenas as mudanças que estão no escopo.
+
+  ## Comportamento central
+  - Gatilho: push/merge na branch padrão do repo legado
+  - Efeito: abre (ou atualiza) um PR no repo novo com o diff equivalente
+  - A sincronização é UNIDIRECIONAL: legado → novo. Mudanças feitas diretamente
+    no repo novo nunca são propagadas de volta para o legado.
+
+  ## Regras de exclusão (filtragem legado → novo)
+  - A action aceita uma lista configurável de paths/arquivos/globs que NÃO devem
+    ser copiados para o repo novo (ex: scripts internos, configs exclusivas do legado).
+  - Mudanças que tocam apenas paths excluídos não geram PR.
+  - `.git/` é sempre excluído (técnico). `.github/` NÃO é excluído por padrão:
+    workflows podem ser sincronizados intencionalmente entre legado e novo.
+    O que não deve ir para o novo (ex: `.github/workflows/sync-to-new.yml`)
+    deve ser listado explicitamente em `exclude_paths`.
+
+  ## Proteção de arquivos exclusivos do repo novo
+  - Se o repo novo contiver arquivos ou diretórios que não existem no repo legado,
+    esses arquivos NUNCA são sobrescritos ou deletados pela sincronização.
+  - O diff do PR toca apenas arquivos que têm origem no lado legado.
+
+  ## Estratégia de branch de sync
+  - Branch fixa no repo novo: `sync/legacy-relay`
+  - A cada disparo, a action força push (force push) nessa branch com o estado
+    atual completo do legado (não apenas o delta do último commit)
+  - Isso garante que PRs não mergeados acumulados nunca fiquem desatualizados:
+    o PR único sempre reflete o estado corrente do legado
+  - Estratégia de merge no legado: squash rebase — cada sync parte de um estado limpo
+  - Reset da branch de sync não é suportado durante a migração; correções devem
+    ser feitas no repo legado e o próximo push re-sincroniza o estado
+
+  ## Tratamento de conflitos
+  - Se um PR de sync conflitar com mudanças já presentes na branch padrão do repo novo,
+    o PR é aberto com uma label de conflito e um comentário descritivo.
+  - O time resolve manualmente (hotfix direto no repo novo).
+  - Um hotfix aplicado apenas no repo novo NÃO dispara nenhuma sincronização reversa.
+  - Diretriz: preferir resolver conflitos no repo novo; não corrigir no legado só para
+    alimentar o sync — o legado está em processo de descontinuação.
+
+  ## Direcionamento estratégico
+  - O repo novo é o estado alvo. O repo legado está sendo descontinuado.
+  - Objetivo: manter o repo novo atualizado com mudanças do legado durante a janela
+    de depreciação, sem poluir o repo novo com preocupações exclusivas do legado.
+  - Quando o legado for totalmente arquivado, a action é desativada.
+
+  ## Stack e convenções
+  - GitHub Actions (workflow YAML + metadados da action)
+  - Lógica da action: bash + gh CLI (preferido por simplicidade e legibilidade)
+  - Evitar TypeScript/Node.js salvo se a complexidade exigir
+  - A action opera entre duas organizações distintas no GitHub (cross-org)
+  - Autenticação: GitHub App com permissões instaladas nas duas orgs (preferido
+    a PAT pessoal para evitar dependência de conta individual)
+  - O token cross-org é passado como input da action (nunca hardcoded)
+  - Conventional commits incentivados nos títulos dos PRs de sync
+  - Inputs da action devem ser documentados via action.yml
+  - Todos os artefatos, comentários de código e documentação devem ser em pt-br
+
+rules:
+  proposal:
+    - Sempre incluir uma seção "Não-objetivos"
+    - Especificar quais eventos do GitHub disparam a action
+    - Esclarecer o que acontece quando o PR de sync já existe (atualiza vs novo PR)
+    - Escrever em pt-br
+  tasks:
+    - Dividir tarefas em blocos de no máximo 2 horas
+    - Cada tarefa deve referenciar o input ou step da action que implementa
+    - Escrever em pt-br

@@ -1,0 +1,119 @@
+name: Sync Legacy to New Repo
+
+# Reusable workflow — call this from your legacy repository on every merge.
+# Every call creates or updates a single open Pull Request in the new repository.
+#
+# Usage in legacy-repo/.github/workflows/sync.yml:
+#
+#   jobs:
+#     sync:
+#       uses: robertoaokistone/poc-legacy-relay-repo/.github/workflows/sync-legacy-to-new.yml@main
+#       with:
+#         new_repo: 'your-org/new-repo'
+#         exclude_paths: |
+#           .legacy-only/
+#           legacy-config.txt
+#       secrets:
+#         new_repo_token: ${{ secrets.NEW_REPO_TOKEN }}
+
+on:
+  workflow_call:
+    inputs:
+      new_repo:
+        description: 'Target new repository (owner/repo).'
+        required: true
+        type: string
+      base_branch:
+        description: 'Base branch in the new repo to create the PR against.'
+        required: false
+        default: 'main'
+        type: string
+      sync_branch:
+        description: 'Name of the branch to create/update in the new repo for the sync PR.'
+        required: false
+        default: 'sync/from-legacy'
+        type: string
+      exclude_paths:
+        description: |
+          Newline-separated list of paths or files in the legacy repo to exclude from the sync.
+          Supports the same glob patterns as rsync --exclude.
+        required: false
+        default: ''
+        type: string
+      commit_message:
+        description: 'Commit message for the sync commit.'
+        required: false
+        default: 'chore: sync changes from legacy repo'
+        type: string
+      pr_title:
+        description: 'Title of the Pull Request in the new repo.'
+        required: false
+        default: 'chore: sync changes from legacy repo'
+        type: string
+      pr_body:
+        description: 'Body of the Pull Request in the new repo.'
+        required: false
+        default: |
+          Automated sync of changes from the legacy repository.
+
+          > ⚠️ Review carefully before merging. Files modified only in this repository (e.g. hotfixes) may be overwritten by this PR.
+        type: string
+      pr_labels:
+        description: 'Comma-separated list of labels to apply to the PR (labels must already exist in the new repo).'
+        required: false
+        default: ''
+        type: string
+    secrets:
+      new_repo_token:
+        description: 'Token with contents:write and pull-requests:write access to the new repository.'
+        required: true
+    outputs:
+      pr_url:
+        description: 'URL of the created or updated Pull Request. Empty string when there are no changes.'
+        value: ${{ jobs.sync.outputs.pr_url }}
+      has_changes:
+        description: 'Whether there were changes to sync (true or false).'
+        value: ${{ jobs.sync.outputs.has_changes }}
+
+concurrency:
+  group: legacy-relay-${{ inputs.new_repo }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    name: Sync legacy → new
+    runs-on: ubuntu-latest
+    outputs:
+      pr_url: ${{ steps.sync_action.outputs.pr_url }}
+      has_changes: ${{ steps.sync_action.outputs.has_changes }}
+    steps:
+      - name: Resolve ref do relay workflow
+        id: relay_ref
+        shell: bash
+        run: |
+          workflow_ref="${{ github.workflow_ref }}"
+          echo "ref=${workflow_ref##*@}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout relay repo no mesmo ref
+        uses: actions/checkout@v4
+        with:
+          repository: robertoaokistone/poc-legacy-relay-repo
+          ref: ${{ steps.relay_ref.outputs.ref }}
+          path: relay-repo
+
+      - name: Run sync action
+        id: sync_action
+        uses: ./relay-repo/.github/actions/sync-legacy-to-new
+        with:
+          legacy_repo: ${{ github.repository }}
+          legacy_ref: ${{ github.sha }}
+          legacy_token: ${{ github.token }}
+          new_repo: ${{ inputs.new_repo }}
+          new_repo_token: ${{ secrets.new_repo_token }}
+          base_branch: ${{ inputs.base_branch }}
+          sync_branch: ${{ inputs.sync_branch }}
+          exclude_paths: ${{ inputs.exclude_paths }}
+          commit_message: ${{ inputs.commit_message }}
+          pr_title: ${{ inputs.pr_title }}
+          pr_body: ${{ inputs.pr_body }}
+          pr_labels: ${{ inputs.pr_labels }}

@@ -1,0 +1,48 @@
+# .github/workflows/sync-to-new.yml
+#
+# Drop this file into your LEGACY repository to automatically sync every merge
+# to the new repository via a Pull Request.
+#
+# Prerequisites:
+#   1. Create a secret called NEW_REPO_TOKEN in the legacy repository with a
+#      Personal Access Token (or GitHub App token) that has:
+#        - contents: write   (to push branches to the new repo)
+#        - pull-requests: write  (to create/update PRs in the new repo)
+#
+#   2. Replace 'your-org/new-repo' with the actual owner/repo of the new repo.
+#
+#   3. (Optional) Adjust exclude_paths to list files/directories that live in
+#      legacy but should NOT be copied to the new repo.
+
+name: Sync to New Repo
+
+on:
+  push:
+    branches:
+      - main          # adjust to match your default branch
+
+jobs:
+  sync:
+    uses: robertoaokistone/poc-legacy-relay-repo/.github/workflows/sync-legacy-to-new.yml@main
+    with:
+      new_repo: 'your-org/new-repo'        # ← replace with your target repo
+
+      # Arquivos/diretórios do legado que NÃO devem ir para o novo repo.
+      # Suporta os mesmos padrões glob do rsync --exclude.
+      # .github/ NÃO é excluído por padrão — workflows podem ser sincronizados.
+      # Liste aqui os que são específicos do legado e não devem ir pro novo.
+      exclude_paths: |
+        .github/workflows/sync-to-new.yml
+        .legacy-only/
+        legacy-config.txt
+        scripts/deploy-legacy.sh
+
+      # Optional overrides (all have sensible defaults):
+      # base_branch: 'main'
+      # sync_branch: 'sync/from-legacy'
+      # commit_message: 'chore: sync changes from legacy repo'
+      # pr_title: 'chore: sync changes from legacy repo'
+      # pr_labels: 'sync,legacy'
+
+    secrets:
+      new_repo_token: ${{ secrets.NEW_REPO_TOKEN }}
