@@ -1,28 +1,28 @@
 # poc-legacy-relay-repo
 
-Reusable GitHub Actions for syncing a **legacy repository** to a **new repository**.
-Every merge to the legacy repo's default branch triggers a Pull Request in the new repo
-with the synced changes — ready for human review before merging.
+GitHub Actions reutilizáveis para sincronizar um **repositório legado** para um **repositório novo**.
+Todo merge na branch padrão do repo legado dispara um Pull Request no repo novo
+com as mudanças sincronizadas — prontas para revisão humana antes do merge.
 
 ---
 
-## Features
+## Funcionalidades
 
-- 🔄 **Automatic sync** — every merge to the legacy repo creates or updates a PR in the new repo
-- 🚫 **Exclude paths** — configure files/directories in legacy that should **not** be copied to new
-- 🛡️ **Preserve new-only files** — files that exist only in the new repo are never deleted
-- 🔀 **One open PR at a time** — pushes to the existing sync branch instead of creating duplicates
-- 🏷️ **Configurable** — customize branch names, PR title, labels, commit message and more
+- 🔄 **Sync automático** — todo merge no legado cria ou atualiza um PR no repo novo
+- 🚫 **Exclusão de paths** — configure arquivos/diretórios do legado que **não** devem ir para o novo
+- 🛡️ **Preserva arquivos exclusivos do novo** — arquivos que só existem no novo nunca são deletados
+- 🔀 **Um PR aberto por vez** — atualiza a branch de sync existente em vez de criar duplicatas
+- 🏷️ **Configurável** — personalize nome da branch, título do PR, labels, mensagem de commit e mais
 
 ---
 
-## Quick start — legacy repository
+## Início rápido — repo legado
 
-Copy [`examples/legacy-repo-sync.yml`](examples/legacy-repo-sync.yml) to
-`.github/workflows/sync-to-new.yml` in your **legacy repository** and adjust the values:
+Copie [`examples/legacy-repo-sync.yml`](examples/legacy-repo-sync.yml) para
+`.github/workflows/sync-to-new.yml` no seu **repo legado** e ajuste os valores:
 
 ```yaml
-name: Sync to New Repo
+name: Sync para Repo Novo
 
 on:
   push:
@@ -33,7 +33,7 @@ jobs:
   sync:
     uses: robertoaokistone/poc-legacy-relay-repo/.github/workflows/sync-legacy-to-new.yml@main
     with:
-      new_repo: 'your-org/new-repo'
+      new_repo: 'sua-org/repo-novo'
       exclude_paths: |
         .legacy-only/
         legacy-config.txt
@@ -42,157 +42,156 @@ jobs:
       new_repo_token: ${{ secrets.NEW_REPO_TOKEN }}
 ```
 
-### Required secret
+### Secret obrigatório
 
-Create a secret called **`NEW_REPO_TOKEN`** in the legacy repository. Two options:
+Crie um secret chamado **`NEW_REPO_TOKEN`** no repo legado. Duas opções:
 
-**GitHub App (recommended for cross-org)**
-Create a GitHub App installed in both organizations with the permissions below,
-generate an installation token, and store it as `NEW_REPO_TOKEN`.
-This avoids relying on a personal account and works cleanly across org boundaries.
+**GitHub App (recomendado para cross-org)**
+Crie um GitHub App instalado nas duas organizações com as permissões abaixo,
+gere um token de instalação e armazene como `NEW_REPO_TOKEN`.
+Evita dependência de conta pessoal e funciona entre orgs diferentes.
 
-**Personal Access Token (simpler for same-org)**
-Use a fine-grained PAT with the permissions below on the **new** repository.
+**Personal Access Token (mais simples para mesma org)**
+Use um fine-grained PAT com as permissões abaixo no **repo novo**.
 
-| Permission | Scope |
+| Permissão | Escopo |
 |---|---|
 | `contents` | **Write** |
 | `pull-requests` | **Write** |
 
 ---
 
-## How it works
+## Como funciona
 
 ```
-Legacy repo (merge to main)
+Repo legado (merge na main)
         │
         ▼
   [sync workflow]
         │
-        ├─ checkout legacy repo at merge commit
-        ├─ checkout new repo
-        ├─ rsync legacy → new
-        │     ├─ skip files in exclude_paths
-        │     └─ keep files that exist only in new  (no --delete)
-        ├─ commit to sync/from-legacy branch
-        └─ open (or update) a PR in the new repo
+        ├─ checkout do legado no commit do merge
+        ├─ checkout do repo novo
+        ├─ rsync legado → novo
+        │     ├─ ignora arquivos em exclude_paths
+        │     └─ preserva arquivos exclusivos do novo (sem --delete)
+        ├─ commit na branch sync/from-legacy
+        └─ abre (ou atualiza) um PR no repo novo
                 │
                 ▼
-          Human review → merge
+          Revisão humana → merge
 ```
 
-1. On every `push` to the configured branch the reusable workflow runs in your legacy repo.
-2. The workflow checks out the legacy repo at the triggering commit and the new repo.
-3. A sync branch (`sync/from-legacy` by default) is created or reset to the new repo's base branch.
-4. `rsync` copies files from legacy → new with these rules:
-   - Files listed in `exclude_paths` are **not** copied.
-   - `.git/` is always excluded. **`.github/` is NOT excluded by default** — workflows can be intentionally synced. Add specific files to `exclude_paths` (e.g. `sync-to-new.yml`, deploy workflows specific to legacy).
-   - Files that exist **only in the new repo** are preserved (rsync runs without `--delete`).
-   - Files modified in **both** repos will show the legacy version in the PR diff — the reviewer decides.
-5. If there are changes, a commit is pushed and a Pull Request is created (or the existing one updated).
-6. A human reviews the PR and merges when ready.
+1. A cada `push` na branch configurada, o reusable workflow roda no repo legado.
+2. O workflow faz checkout do legado no commit do push e do repo novo.
+3. A branch `sync/from-legacy` é criada ou resetada para a branch base do novo (estado atual, não delta).
+4. `rsync` copia arquivos do legado → novo com estas regras:
+   - Arquivos listados em `exclude_paths` **não** são copiados.
+   - `.git/` é sempre excluído. **`.github/` NÃO é excluído por padrão** — workflows podem ser sincronizados intencionalmente. Adicione arquivos específicos ao `exclude_paths` (ex: `sync-to-new.yml`, workflows de deploy exclusivos do legado).
+   - Arquivos que existem **apenas no novo repo** são preservados (rsync sem `--delete`).
+   - Arquivos modificados nos **dois repos** aparecerão com a versão do legado no diff do PR — o revisor decide.
+5. Se houver mudanças, um commit é feito e um PR é criado (ou o existente é atualizado).
+6. Um humano revisa o PR e faz o merge quando estiver pronto.
 
-> **Conflict / hotfix policy**
-> If a file was hotfixed directly in the new repo and the same file was later modified in legacy,
-> the sync PR will contain the legacy version. The PR reviewer should inspect the diff and
-> cherry-pick the hotfix into the PR branch as needed.
-> The recommended direction is **not to auto-merge** sync PRs — always review.
+> **Política de conflitos e hotfixes**
+> Se um arquivo foi corrigido diretamente no novo repo (hotfix) e depois modificado no legado,
+> o PR de sync vai conter a versão do legado. O revisor deve inspecionar o diff e
+> incorporar o hotfix no branch do PR manualmente.
+> A diretriz é **não fazer merge automático** dos PRs de sync — sempre revisar.
 
 ---
 
-## Reusable workflow inputs
+## Inputs do reusable workflow
 
-Used when calling `.github/workflows/sync-legacy-to-new.yml` via `workflow_call`:
+Usados ao chamar `.github/workflows/sync-legacy-to-new.yml` via `workflow_call`:
 
-| Input | Required | Default | Description |
+| Input | Obrigatório | Padrão | Descrição |
 |---|---|---|---|
-| `new_repo` | ✅ | — | Target new repository (`owner/repo`) |
-| `base_branch` | ❌ | `main` | Base branch in the new repo |
-| `sync_branch` | ❌ | `sync/from-legacy` | Branch for the sync PR |
-| `exclude_paths` | ❌ | `''` | Newline-separated paths to exclude from sync |
-| `commit_message` | ❌ | `chore: sync changes from legacy repo` | Commit message |
-| `pr_title` | ❌ | `chore: sync changes from legacy repo` | PR title |
-| `pr_body` | ❌ | *(default warning message)* | PR body |
-| `pr_labels` | ❌ | `''` | Comma-separated labels to add to the PR |
+| `new_repo` | ✅ | — | Repo novo destino (`owner/repo`) |
+| `base_branch` | ❌ | `main` | Branch base no repo novo |
+| `sync_branch` | ❌ | `sync/from-legacy` | Branch para o PR de sync |
+| `exclude_paths` | ❌ | `''` | Paths a excluir do sync (um por linha) |
+| `commit_message` | ❌ | `chore: sync changes from legacy repo` | Mensagem de commit |
+| `pr_title` | ❌ | `chore: sync changes from legacy repo` | Título do PR |
+| `pr_body` | ❌ | *(mensagem padrão de aviso)* | Corpo do PR |
+| `pr_labels` | ❌ | `''` | Labels a adicionar ao PR (separadas por vírgula) |
 
-**Secret:** `new_repo_token` *(required)* — token with `contents:write` + `pull-requests:write` on the new repo.
+**Secret:** `new_repo_token` *(obrigatório)* — token com `contents:write` + `pull-requests:write` no repo novo.
 
 ---
 
-## Composite action inputs
+## Inputs da composite action
 
-For advanced scenarios you can call the composite action directly in your own workflow:
+Para cenários avançados, você pode chamar a composite action diretamente:
 
 ```yaml
 steps:
   - uses: robertoaokistone/poc-legacy-relay-repo/.github/actions/sync-legacy-to-new@main
     with:
-      new_repo: 'your-org/new-repo'
+      new_repo: 'sua-org/repo-novo'
       new_repo_token: ${{ secrets.NEW_REPO_TOKEN }}
       exclude_paths: |
         .legacy-only/
         docs/legacy-guide.md
 ```
 
-All reusable workflow inputs are available plus:
+Todos os inputs do reusable workflow estão disponíveis, mais:
 
-| Input | Required | Default | Description |
+| Input | Obrigatório | Padrão | Descrição |
 |---|---|---|---|
-| `legacy_repo` | ❌ | `${{ github.repository }}` | Source legacy repository |
-| `legacy_ref` | ❌ | `${{ github.sha }}` | Git ref to sync from |
-| `legacy_token` | ❌ | `${{ github.token }}` | Token to read the legacy repo |
+| `legacy_repo` | ❌ | `${{ github.repository }}` | Repo legado de origem |
+| `legacy_ref` | ❌ | `${{ github.sha }}` | Git ref para sincronizar |
+| `legacy_token` | ❌ | `${{ github.token }}` | Token para ler o repo legado |
 
-**Outputs:** `pr_url` (URL of the PR or empty), `has_changes` (`true`/`false`).
+**Outputs:** `pr_url` (URL do PR ou vazio), `has_changes` (`true`/`false`).
 
 ---
 
-## Requirements
+## Requisitos
 
-The composite action requires the following tools on the runner:
+A composite action requer as seguintes ferramentas no runner:
 
-| Tool | Purpose |
+| Ferramenta | Finalidade |
 |---|---|
-| `rsync` | File sync from legacy to new |
-| `gh` | GitHub CLI — create/update PR, manage labels |
-| `jq` | Parse JSON responses from `gh` |
+| `rsync` | Sync de arquivos do legado para o novo |
+| `gh` | GitHub CLI — criar/atualizar PR, gerenciar labels |
+| `jq` | Parsear respostas JSON do `gh` |
 
-All three are pre-installed on GitHub-hosted `ubuntu-latest` runners.
-For self-hosted runners, ensure these tools are available before calling the action.
+As três estão pré-instaladas nos runners `ubuntu-latest` hospedados pelo GitHub.
+Para runners self-hosted, certifique-se de que essas ferramentas estejam disponíveis.
 
 ---
 
-## Version pinning
+## Pinagem de versão
 
-The examples in this document reference `@main`, which always uses the latest version.
-For **production** use, pin to a specific tag or commit SHA to avoid unexpected breaking
-changes:
+Os exemplos neste documento referenciam `@main`, que sempre usa a versão mais recente.
+Para uso em **produção**, pine a uma tag ou SHA específico para evitar mudanças inesperadas:
 
 ```yaml
-# Reusable workflow — pin to a release tag
+# Reusable workflow — pine a uma tag de release
 uses: robertoaokistone/poc-legacy-relay-repo/.github/workflows/sync-legacy-to-new.yml@v1.0.0
 
-# Composite action — pin to a release tag
+# Composite action — pine a uma tag de release
 uses: robertoaokistone/poc-legacy-relay-repo/.github/actions/sync-legacy-to-new@v1.0.0
 ```
 
 ---
 
-## Archiving the legacy repo
+## Arquivamento do legado
 
-When the legacy repo is ready to be archived:
+Quando o repo legado estiver pronto para ser arquivado:
 
-1. Merge or close any open sync PRs in the new repo.
-2. Remove the sync workflow from the legacy repo (or simply archive the repo on GitHub).
-3. The new repo continues independently.
-
----
-
-## Examples
-
-See the [`examples/`](examples/) directory for ready-to-use workflow files.
+1. Mergear ou fechar todos os PRs de sync abertos no repo novo.
+2. Remover o workflow de sync do legado (ou simplesmente arquivar o repo no GitHub).
+3. O repo novo segue de forma independente.
 
 ---
 
-## Operational runbook
+## Exemplos
 
-For setup steps, known issues, and troubleshooting encountered during the POC, see [RUNBOOK.md](RUNBOOK.md).
+Veja o diretório [`examples/`](examples/) para workflows prontos para uso.
+
+---
+
+## Runbook operacional
+
+Para passos de configuração, problemas conhecidos e troubleshooting encontrados durante a POC, veja [RUNBOOK.md](RUNBOOK.md).
