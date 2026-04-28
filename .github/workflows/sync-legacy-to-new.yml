@@ -18,6 +18,11 @@ name: Sync Legacy to New Repo
 
 on:
   workflow_call:
+
+concurrency:
+  group: legacy-relay-${{ inputs.new_repo }}
+  cancel-in-progress: true
+
     inputs:
       new_repo:
         description: 'Target new repository (owner/repo).'

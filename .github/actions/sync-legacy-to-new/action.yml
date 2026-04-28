@@ -3,6 +3,8 @@ description: >
   Syncs files from a legacy repository to a new repository and opens a Pull Request.
   Files that exist only in the new repository are preserved (never deleted).
   Files listed in exclude_paths are not copied from legacy to new.
+  .git/ is always excluded. .github/ flows normally — use exclude_paths to
+  filter specific workflows or files that should not reach the new repo.
 
 inputs:
   legacy_repo:
@@ -131,6 +133,10 @@ runs:
         cd "${GITHUB_WORKSPACE}"
 
         # ── Build rsync exclude list ───────────────────────────────────────────
+        # .git/ é sempre excluído (técnico, nunca faz sentido syncar).
+        # .github/ flui normalmente — workflows específicos do legado que não
+        # devem ir pro new (ex: o próprio sync-to-new.yml) devem ser listados
+        # em exclude_paths pelo usuário.
         RSYNC_EXCLUDES=("--exclude=.git/")
         if [ -n "${EXCLUDE_PATHS}" ]; then
           # Normalize commas to newlines, then iterate

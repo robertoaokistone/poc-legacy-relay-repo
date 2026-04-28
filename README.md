@@ -44,8 +44,15 @@ jobs:
 
 ### Required secret
 
-Create a secret called **`NEW_REPO_TOKEN`** in the legacy repository with a Personal Access Token
-(classic) or a fine-grained token that has the following permissions on the **new** repository:
+Create a secret called **`NEW_REPO_TOKEN`** in the legacy repository. Two options:
+
+**GitHub App (recommended for cross-org)**
+Create a GitHub App installed in both organizations with the permissions below,
+generate an installation token, and store it as `NEW_REPO_TOKEN`.
+This avoids relying on a personal account and works cleanly across org boundaries.
+
+**Personal Access Token (simpler for same-org)**
+Use a fine-grained PAT with the permissions below on the **new** repository.
 
 | Permission | Scope |
 |---|---|

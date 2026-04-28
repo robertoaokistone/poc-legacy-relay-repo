@@ -27,9 +27,12 @@ jobs:
     with:
       new_repo: 'your-org/new-repo'        # ← replace with your target repo
 
-      # Files/directories in legacy that should NOT be copied to the new repo.
-      # Supports the same glob patterns as rsync --exclude.
+      # Arquivos/diretórios do legado que NÃO devem ir para o novo repo.
+      # Suporta os mesmos padrões glob do rsync --exclude.
+      # .github/ NÃO é excluído por padrão — workflows podem ser sincronizados.
+      # Liste aqui os que são específicos do legado e não devem ir pro novo.
       exclude_paths: |
+        .github/workflows/sync-to-new.yml
         .legacy-only/
         legacy-config.txt
         scripts/deploy-legacy.sh
