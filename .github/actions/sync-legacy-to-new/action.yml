@@ -1,0 +1,220 @@
+name: 'Sync Legacy to New Repo'
+description: >
+  Syncs files from a legacy repository to a new repository and opens a Pull Request.
+  Files that exist only in the new repository are preserved (never deleted).
+  Files listed in exclude_paths are not copied from legacy to new.
+
+inputs:
+  legacy_repo:
+    description: 'Source legacy repository (owner/repo). Defaults to the calling repository.'
+    required: false
+    default: ${{ github.repository }}
+  legacy_ref:
+    description: 'Git ref (branch, tag, or SHA) to sync from the legacy repo. Defaults to the triggering commit.'
+    required: false
+    default: ${{ github.sha }}
+  legacy_token:
+    description: 'Token to read from the legacy repository. Defaults to GITHUB_TOKEN.'
+    required: false
+    default: ${{ github.token }}
+  new_repo:
+    description: 'Target new repository (owner/repo).'
+    required: true
+  new_repo_token:
+    description: 'Token with read and write access to the new repository (contents + pull-requests).'
+    required: true
+  base_branch:
+    description: 'Base branch in the new repo to create the PR against.'
+    required: false
+    default: 'main'
+  sync_branch:
+    description: 'Name of the branch to create/update in the new repo for the sync PR.'
+    required: false
+    default: 'sync/from-legacy'
+  exclude_paths:
+    description: |
+      Newline-separated list of paths or files in the legacy repo to exclude from the sync.
+      Supports the same glob patterns as rsync --exclude.
+      Example:
+        .legacy-only/
+        legacy-config.txt
+        scripts/deploy-legacy.sh
+    required: false
+    default: ''
+  commit_message:
+    description: 'Commit message used for the sync commit.'
+    required: false
+    default: 'chore: sync changes from legacy repo'
+  pr_title:
+    description: 'Title of the Pull Request created in the new repo.'
+    required: false
+    default: 'chore: sync changes from legacy repo'
+  pr_body:
+    description: 'Body of the Pull Request created in the new repo.'
+    required: false
+    default: |
+      Automated sync of changes from the legacy repository.
+
+      > ⚠️ Review carefully before merging. Files modified only in this repository (e.g. hotfixes) may be overwritten by this PR.
+  pr_labels:
+    description: 'Comma-separated list of labels to apply to the PR (labels must already exist in the new repo).'
+    required: false
+    default: ''
+
+outputs:
+  pr_url:
+    description: 'URL of the created or updated Pull Request. Empty string when there are no changes.'
+    value: ${{ steps.sync.outputs.pr_url }}
+  has_changes:
+    description: 'Whether there were changes to sync (true or false).'
+    value: ${{ steps.sync.outputs.has_changes }}
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout legacy repository
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ inputs.legacy_repo }}
+        ref: ${{ inputs.legacy_ref }}
+        token: ${{ inputs.legacy_token }}
+        path: _legacy_src
+        fetch-depth: 1
+
+    - name: Checkout new repository
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ inputs.new_repo }}
+        token: ${{ inputs.new_repo_token }}
+        path: _new_src
+        fetch-depth: 0
+
+    - name: Sync, commit and open PR
+      id: sync
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.new_repo_token }}
+        LEGACY_REPO: ${{ inputs.legacy_repo }}
+        LEGACY_REF: ${{ inputs.legacy_ref }}
+        NEW_REPO: ${{ inputs.new_repo }}
+        SYNC_BRANCH: ${{ inputs.sync_branch }}
+        BASE_BRANCH: ${{ inputs.base_branch }}
+        EXCLUDE_PATHS: ${{ inputs.exclude_paths }}
+        COMMIT_MESSAGE: ${{ inputs.commit_message }}
+        PR_TITLE: ${{ inputs.pr_title }}
+        PR_BODY: ${{ inputs.pr_body }}
+        PR_LABELS: ${{ inputs.pr_labels }}
+      run: |
+        set -euo pipefail
+
+        # ── Configure git ──────────────────────────────────────────────────────
+        cd "${GITHUB_WORKSPACE}/_new_src"
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git fetch origin
+
+        # ── Validate base branch ───────────────────────────────────────────────
+        if ! git ls-remote --heads origin "${BASE_BRANCH}" | grep -q .; then
+          echo "::error::Base branch '${BASE_BRANCH}' not found in ${NEW_REPO}"
+          exit 1
+        fi
+
+        # ── Prepare sync branch (always reset to base to avoid stale diffs) ───
+        if git ls-remote --heads origin "${SYNC_BRANCH}" | grep -q .; then
+          git checkout "${SYNC_BRANCH}"
+          git reset --hard "origin/${BASE_BRANCH}"
+        else
+          git checkout -b "${SYNC_BRANCH}" "origin/${BASE_BRANCH}"
+        fi
+
+        # ── Return to workspace root for rsync ────────────────────────────────
+        cd "${GITHUB_WORKSPACE}"
+
+        # ── Build rsync exclude list ───────────────────────────────────────────
+        RSYNC_EXCLUDES=("--exclude=.git/")
+        if [ -n "${EXCLUDE_PATHS}" ]; then
+          # Normalize commas to newlines, then iterate
+          while IFS= read -r single_path; do
+            single_path="$(echo "${single_path}" | xargs 2>/dev/null || true)"
+            [ -n "${single_path}" ] && RSYNC_EXCLUDES+=("--exclude=${single_path}")
+          done < <(echo "${EXCLUDE_PATHS}" | tr ',' '\n')
+        fi
+
+        echo "Rsync exclude flags: ${RSYNC_EXCLUDES[*]}"
+
+        # ── Sync files ────────────────────────────────────────────────────────
+        # Without --delete: files that exist only in the new repo are preserved.
+        # --checksum is required because git checkouts do not preserve mtime, so
+        # rsync's default size+timestamp comparison would mark every file as
+        # changed on a fresh clone. Content-hash comparison ensures only genuinely
+        # modified files are copied.
+        rsync -av --checksum "${RSYNC_EXCLUDES[@]}" _legacy_src/ _new_src/
+
+        # ── Detect changes ────────────────────────────────────────────────────
+        cd "${GITHUB_WORKSPACE}/_new_src"
+        git add -A
+
+        if git diff --cached --quiet; then
+          echo "No changes to sync."
+          echo "has_changes=false" >> "${GITHUB_OUTPUT}"
+          exit 0
+        fi
+
+        echo "has_changes=true" >> "${GITHUB_OUTPUT}"
+        echo "Changes staged:"
+        git diff --cached --stat
+
+        # ── Commit ────────────────────────────────────────────────────────────
+        FULL_COMMIT_MSG="$(printf '%s\n\nSource: %s@%s' "${COMMIT_MESSAGE}" "${LEGACY_REPO}" "${LEGACY_REF}")"
+        git commit -m "${FULL_COMMIT_MSG}"
+
+        # --force-with-lease (without an explicit refspec) checks that the remote
+        # ref matches the last-fetched tracking ref, preventing silent overwrites
+        # from concurrent runs. An explicit :origin/<branch> form would fail for
+        # new branches that have no remote tracking ref yet.
+        git push --force-with-lease origin "${SYNC_BRANCH}"
+
+        # ── Create or update PR ───────────────────────────────────────────────
+        EXISTING_PR_JSON="$(
+          gh pr list \
+            --repo "${NEW_REPO}" \
+            --head "${SYNC_BRANCH}" \
+            --base "${BASE_BRANCH}" \
+            --state open \
+            --json url,number \
+            --jq 'first // empty' 2>/dev/null || true
+        )"
+
+        if [ -n "${EXISTING_PR_JSON}" ]; then
+          PR_URL="$(echo "${EXISTING_PR_JSON}" | jq -r '.url')"
+          PR_NUMBER="$(echo "${EXISTING_PR_JSON}" | jq -r '.number')"
+          echo "Updating existing PR #${PR_NUMBER}: ${PR_URL}"
+          echo "${PR_BODY}" | gh pr edit "${PR_NUMBER}" \
+            --repo "${NEW_REPO}" \
+            --body-file -
+        else
+          LABEL_ARGS=()
+          if [ -n "${PR_LABELS}" ]; then
+            IFS=',' read -ra _labels <<< "${PR_LABELS}"
+            for _label in "${_labels[@]}"; do
+              _label="$(echo "${_label}" | xargs 2>/dev/null || true)"
+              [ -n "${_label}" ] && LABEL_ARGS+=(--label "${_label}")
+            done
+          fi
+
+          PR_URL="$(
+            echo "${PR_BODY}" | gh pr create \
+              --repo "${NEW_REPO}" \
+              --title "${PR_TITLE}" \
+              --body-file - \
+              --base "${BASE_BRANCH}" \
+              --head "${SYNC_BRANCH}" \
+              "${LABEL_ARGS[@]}" \
+              --json url \
+              --jq '.url'
+          )"
+
+          echo "Created PR: ${PR_URL}"
+        fi
+
+        echo "pr_url=${PR_URL}" >> "${GITHUB_OUTPUT}"
