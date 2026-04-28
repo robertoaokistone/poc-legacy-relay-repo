@@ -86,6 +86,7 @@ Legacy repo (merge to main)
 3. A sync branch (`sync/from-legacy` by default) is created or reset to the new repo's base branch.
 4. `rsync` copies files from legacy → new with these rules:
    - Files listed in `exclude_paths` are **not** copied.
+   - `.git/` is always excluded. **`.github/` is NOT excluded by default** — workflows can be intentionally synced. Add specific files to `exclude_paths` (e.g. `sync-to-new.yml`, deploy workflows specific to legacy).
    - Files that exist **only in the new repo** are preserved (rsync runs without `--delete`).
    - Files modified in **both** repos will show the legacy version in the PR diff — the reviewer decides.
 5. If there are changes, a commit is pushed and a Pull Request is created (or the existing one updated).
@@ -189,3 +190,9 @@ When the legacy repo is ready to be archived:
 ## Examples
 
 See the [`examples/`](examples/) directory for ready-to-use workflow files.
+
+---
+
+## Operational runbook
+
+For setup steps, known issues, and troubleshooting encountered during the POC, see [RUNBOOK.md](RUNBOOK.md).
