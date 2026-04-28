@@ -87,9 +87,23 @@ jobs:
       pr_url: ${{ steps.sync_action.outputs.pr_url }}
       has_changes: ${{ steps.sync_action.outputs.has_changes }}
     steps:
+      - name: Resolve ref do relay workflow
+        id: relay_ref
+        shell: bash
+        run: |
+          workflow_ref="${{ github.workflow_ref }}"
+          echo "ref=${workflow_ref##*@}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout relay repo no mesmo ref
+        uses: actions/checkout@v4
+        with:
+          repository: robertoaokistone/poc-legacy-relay-repo
+          ref: ${{ steps.relay_ref.outputs.ref }}
+          path: relay-repo
+
       - name: Run sync action
         id: sync_action
-        uses: robertoaokistone/poc-legacy-relay-repo/.github/actions/sync-legacy-to-new@main
+        uses: ./relay-repo/.github/actions/sync-legacy-to-new
         with:
           legacy_repo: ${{ github.repository }}
           legacy_ref: ${{ github.sha }}

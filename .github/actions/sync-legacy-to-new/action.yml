@@ -122,12 +122,9 @@ runs:
         fi
 
         # ── Prepare sync branch (always reset to base to avoid stale diffs) ───
-        if git ls-remote --heads origin "${SYNC_BRANCH}" | grep -q .; then
-          git checkout "${SYNC_BRANCH}"
-          git reset --hard "origin/${BASE_BRANCH}"
-        else
-          git checkout -b "${SYNC_BRANCH}" "origin/${BASE_BRANCH}"
-        fi
+        # -B cria ou reseta a branch local em um único comando, evitando falha
+        # quando a branch só existe no remoto (sem tracking local ainda).
+        git checkout -B "${SYNC_BRANCH}" "origin/${BASE_BRANCH}"
 
         # ── Return to workspace root for rsync ────────────────────────────────
         cd "${GITHUB_WORKSPACE}"
@@ -154,7 +151,7 @@ runs:
         # rsync's default size+timestamp comparison would mark every file as
         # changed on a fresh clone. Content-hash comparison ensures only genuinely
         # modified files are copied.
-        rsync -av --checksum "${RSYNC_EXCLUDES[@]}" _legacy_src/ _new_src/
+        rsync -a --checksum "${RSYNC_EXCLUDES[@]}" _legacy_src/ _new_src/
 
         # ── Detect changes ────────────────────────────────────────────────────
         cd "${GITHUB_WORKSPACE}/_new_src"

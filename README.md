@@ -145,6 +145,21 @@ All reusable workflow inputs are available plus:
 
 ---
 
+## Requirements
+
+The composite action requires the following tools on the runner:
+
+| Tool | Purpose |
+|---|---|
+| `rsync` | File sync from legacy to new |
+| `gh` | GitHub CLI — create/update PR, manage labels |
+| `jq` | Parse JSON responses from `gh` |
+
+All three are pre-installed on GitHub-hosted `ubuntu-latest` runners.
+For self-hosted runners, ensure these tools are available before calling the action.
+
+---
+
 ## Version pinning
 
 The examples in this document reference `@main`, which always uses the latest version.
